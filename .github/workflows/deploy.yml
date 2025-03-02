@@ -10,7 +10,7 @@ env:
   AWS_REGION: us-east-2
   ECR_REPOSITORY: posapp
   ECR_REGISTRY: 851725454079.dkr.ecr.us-east-2.amazonaws.com
-  ECS_CLUSTER: pos-cluster
+  ECS_CLUSTER: ms-cluster
   ECS_SERVICE: pos-service
   CONTAINER_NAME: pos-container
 
@@ -62,6 +62,6 @@ jobs:
     - name: Update ECS service
       run: |
         echo "Updating ECS service..."
-        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --force-new-deployment
+        aws ecs update-service --cluster $ECS_CLUSTER --service arn:aws:ecs:us-east-2:851725454079:service/ms-cluster/pos-service --force-new-deployment
         echo "Waiting for service to stabilize..."
         aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE 
