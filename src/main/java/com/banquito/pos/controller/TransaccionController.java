@@ -34,7 +34,7 @@ public class TransaccionController {
     private final TransaccionMapper mapper;
     
     @PostMapping
-    @Operation(summary = "Procesar transacción", 
+    @Operation(summary = "Procesar transacción 1111", 
                description = "Procesa una transacción en el terminal POS (simple o recurrente según los parámetros)")
     @ApiResponse(responseCode = "200", description = "Transacción autorizada correctamente")
     @ApiResponse(responseCode = "400", description = "Transacción rechazada o datos inválidos")
