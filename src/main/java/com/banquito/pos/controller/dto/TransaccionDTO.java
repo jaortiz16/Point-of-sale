@@ -36,8 +36,8 @@ public class TransaccionDTO {
     
     @NotBlank(message = "La modalidad es requerida")
     @Size(max = 3, message = "La modalidad no puede exceder los 3 caracteres")
-    @Pattern(regexp = "SIM|REC", message = "La modalidad debe ser SIM (Simple) o REC (Recurrente)")
-    @Schema(description = "Modalidad de pago: SIM (Simple), REC (Recurrente)", example = "SIM")
+    @Pattern(regexp = "SIM|DIF|REC", message = "La modalidad debe ser SIM (Simple), DIF (Diferida) o REC (Recurrente)")
+    @Schema(description = "Modalidad de pago: SIM (Simple), DIF (Diferida), REC (Recurrente)", example = "SIM")
     private String modalidad;
     
     @Size(max = 50, message = "El detalle no puede exceder los 50 caracteres")
@@ -80,7 +80,7 @@ public class TransaccionDTO {
     private Integer frecuenciaDias;
     
     @Min(value = 1, message = "El plazo debe ser mayor a cero")
-    @Schema(description = "Número de meses para pagos diferidos (solo para modalidad SIM)", example = "12")
+    @Schema(description = "Número de meses para pagos diferidos (para modalidad DIF)", example = "12")
     private Integer plazo;
     
     @Pattern(regexp = "^[0-9]{3,4}$", message = "El CVV debe tener 3 o 4 dígitos")

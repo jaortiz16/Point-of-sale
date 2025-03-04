@@ -23,7 +23,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/v1/transacciones")
+@RequestMapping("/api/v1/transacciones")
 @RequiredArgsConstructor
 @Tag(name = "Transacciones", description = "API para procesar transacciones en el POS")
 public class TransaccionController {
@@ -44,44 +44,55 @@ public class TransaccionController {
         try {
             log.info("Procesando transacción en terminal POS");
             
-            // Forzar el tipo a PAG según especificaciones
             transaccionDTO.setTipo("PAG");
             
-            // Asegurar modalidad correcta (SIM o REC)
             if (transaccionDTO.getModalidad() != null) {
-                if (!"SIM".equals(transaccionDTO.getModalidad()) && !"REC".equals(transaccionDTO.getModalidad())) {
+                if (!"SIM".equals(transaccionDTO.getModalidad()) && 
+                    !"REC".equals(transaccionDTO.getModalidad()) && 
+                    !"DIF".equals(transaccionDTO.getModalidad())) {
                     transaccionDTO.setModalidad("SIM");
                 }
             } else {
                 transaccionDTO.setModalidad("SIM");
             }
             
-            // Capturar datos sensibles antes de convertir al modelo
+            if ("DIF".equals(transaccionDTO.getModalidad()) && 
+                (transaccionDTO.getPlazo() == null || transaccionDTO.getPlazo() <= 0)) {
+                log.error("Transacción diferida requiere un plazo válido");
+                return ResponseEntity.badRequest().body("La transacción diferida requiere un plazo válido");
+            }
+            
+            if ("REC".equals(transaccionDTO.getModalidad()) && 
+                (transaccionDTO.getFrecuenciaDias() == null || transaccionDTO.getFrecuenciaDias() <= 0)) {
+                log.error("Transacción recurrente requiere una frecuencia válida");
+                return ResponseEntity.badRequest().body("La transacción recurrente requiere una frecuencia válida");
+            }
             String cvv = transaccionDTO.getCvv();
             String fechaExpiracion = transaccionDTO.getFechaExpiracion();
             
             Transaccion transaccion = this.mapper.toModel(transaccionDTO);
             Transaccion transaccionProcesada = this.service.procesarTransaccion(transaccion, cvv, fechaExpiracion);
             
-            // Verificar el estado de la transacción procesada
-            // Ahora tendremos dos transacciones en la BD: una ENV (enviada) y otra AUT/REC (respuesta)
-            // El servicio ahora devuelve la transacción de respuesta
             if ("REC".equals(transaccionProcesada.getEstado())) {
                 log.info("Transacción rechazada: {}", transaccionProcesada.getDetalle());
-                return ResponseEntity.badRequest().body(this.mapper.toDTO(transaccionProcesada));
+                return ResponseEntity.status(400).body("Pago rechazado");
             }
             
-            // Si es "AUT" (autorizada), devolver código 200 (OK)
+            log.info("Transacción autorizada: {}", transaccionProcesada.getCodTransaccion());
             return ResponseEntity.ok(this.mapper.toDTO(transaccionProcesada));
-        } catch (NotFoundException e) {
-            log.error("Terminal POS no encontrado: {}", e.getMessage());
-            return ResponseEntity.notFound().build();
+            
         } catch (ValidationException e) {
             log.error("Error de validación: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body("Pago rechazado");
+        } catch (NotFoundException e) {
+            log.error("Terminal POS no encontrado: {}", e.getMessage());
+            return ResponseEntity.status(404).body("Pago rechazado");
         } catch (CommunicationException e) {
-            log.error("Error de comunicación: {}", e.getMessage());
-            return ResponseEntity.internalServerError().body(e.getMessage());
+            log.error("Error de comunicación con el Payment Gateway: {}", e.getMessage());
+            return ResponseEntity.status(400).body("Pago rechazado");
+        } catch (Exception e) {
+            log.error("Error inesperado: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body("Pago rechazado");
         }
     }
 } 

@@ -22,7 +22,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/v1/configuracion")
+@RequestMapping("/api/v1/configuracion")
 @RequiredArgsConstructor
 @Tag(name = "Configuración POS", description = "API para configuración del terminal POS")
 public class ConfiguracionPosController {

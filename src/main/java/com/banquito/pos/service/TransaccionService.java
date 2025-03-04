@@ -42,32 +42,27 @@ public class TransaccionService {
         String uuid = UUID.randomUUID().toString();
         String codTransaccion = generarCodigoTransaccion();
         
-        // Configuración inicial de la transacción
         transaccion.setCodTransaccion(codTransaccion);
         transaccion.setCodigoUnicoTransaccion(uuid);
         transaccion.setFecha(LocalDateTime.now());
         
-        // Establecer estado inicial como ENV (enviado)
         transaccion.setEstado("ENV");
         transaccion.setEstadoRecibo("PEN");
         
-        // Asegurar que el tipo sea PAG
         transaccion.setTipo("PAG");
         
-        // Asegurar que la modalidad sea SIM o REC
-        if (!"SIM".equals(transaccion.getModalidad()) && !"REC".equals(transaccion.getModalidad())) {
+        if (!"SIM".equals(transaccion.getModalidad()) && 
+            !"REC".equals(transaccion.getModalidad()) && 
+            !"DIF".equals(transaccion.getModalidad())) {
             transaccion.setModalidad("SIM");
         }
         
-        // Guardar la transacción inicial con estado ENV
         Transaccion transaccionEnviada = this.repository.save(transaccion);
         log.info("Transacción guardada con estado ENV: {}", transaccionEnviada.getCodTransaccion());
         
         try {
-            // Crear una nueva instancia para la transacción de respuesta
             Transaccion transaccionRespuesta = new Transaccion();
             
-            // Copiar datos de la transacción original
             transaccionRespuesta.setCodTransaccion(codTransaccion + "-RESP");
             transaccionRespuesta.setCodigoUnicoTransaccion(uuid);
             transaccionRespuesta.setFecha(LocalDateTime.now());
@@ -82,23 +77,17 @@ public class TransaccionService {
             transaccionRespuesta.setFrecuenciaDias(transaccion.getFrecuenciaDias());
             transaccionRespuesta.setPlazo(transaccion.getPlazo());
             
-            // Estado inicial del recibo para la segunda transacción
             transaccionRespuesta.setEstadoRecibo("PEN");
             
-            // Enviar al gateway y procesar respuesta
             TransaccionResponseDTO respuesta = enviarTransaccionPaymentGateway(transaccion, configuracion, cvv, fechaExpiracion);
             
-            // Establecer estado según respuesta
-            if ("APR".equals(respuesta.getEstado())) {
-                // Si fue aprobada en el gateway, es autorizada (AUT) en el sistema
-                transaccionRespuesta.setEstado("AUT");
-            } else {
-                // Si fue rechazada o cualquier otro estado, es rechazada (REC) en el sistema
-                transaccionRespuesta.setEstado("REC");
+            transaccionRespuesta.setEstado("AUT");
+            if (respuesta.getMensaje() != null) {
                 transaccionRespuesta.setDetalle(respuesta.getMensaje());
+            } else {
+                transaccionRespuesta.setDetalle("Transacción autorizada");
             }
             
-            // Guardar la segunda transacción con el estado actualizado
             Transaccion transaccionFinal = this.repository.save(transaccionRespuesta);
             log.info("Transacción de respuesta guardada con estado {}: {}", 
                     transaccionFinal.getEstado(), transaccionFinal.getCodTransaccion());
@@ -108,10 +97,8 @@ public class TransaccionService {
         } catch (FeignException e) {
             log.error("Error al comunicarse con el Payment Gateway: {}", e.getMessage());
             
-            // Crear transacción de respuesta con error
             Transaccion transaccionError = new Transaccion();
             
-            // Copiar datos de la transacción original
             transaccionError.setCodTransaccion(codTransaccion + "-ERROR");
             transaccionError.setCodigoUnicoTransaccion(uuid);
             transaccionError.setFecha(LocalDateTime.now());
@@ -128,7 +115,6 @@ public class TransaccionService {
             transaccionError.setEstado("REC");
             transaccionError.setEstadoRecibo("PEN");
             
-            // Guardar la transacción de error
             Transaccion errorGuardado = this.repository.save(transaccionError);
             log.info("Transacción de error guardada: {}", errorGuardado.getCodTransaccion());
             
@@ -161,7 +147,6 @@ public class TransaccionService {
             throw new ValidationException("El nombre del titular es requerido");
         }
         
-        // Forzar tipo PAG
         transaccion.setTipo("PAG");
         
         if (transaccion.getMarca() == null) {
@@ -169,14 +154,22 @@ public class TransaccionService {
             throw new ValidationException("La marca de la tarjeta es requerida");
         }
         
-        // Para transacciones recurrentes, verificar frecuencia
-        if ("REC".equals(transaccion.getModalidad()) && (transaccion.getFrecuenciaDias() == null || transaccion.getFrecuenciaDias() < 1)) {
-            log.error("La frecuencia para una transacción recurrente debe ser mayor a 0");
-            throw new ValidationException("La frecuencia para una transacción recurrente debe ser mayor a 0");
+        if ("DIF".equals(transaccion.getModalidad())) {
+            if (transaccion.getPlazo() == null || transaccion.getPlazo() <= 0) {
+                log.error("Para transacciones diferidas, el plazo es requerido y debe ser mayor a 0");
+                throw new ValidationException("Para transacciones diferidas, el plazo es requerido y debe ser mayor a 0");
+            }
+        } else if ("REC".equals(transaccion.getModalidad())) {
+            if (transaccion.getFrecuenciaDias() == null || transaccion.getFrecuenciaDias() <= 0) {
+                log.error("Para transacciones recurrentes, la frecuencia es requerida y debe ser mayor a 0");
+                throw new ValidationException("Para transacciones recurrentes, la frecuencia es requerida y debe ser mayor a 0");
+            }
         }
         
-        // Si la modalidad no es SIM o REC, establecer SIM por defecto
-        if (transaccion.getModalidad() == null || (!"SIM".equals(transaccion.getModalidad()) && !"REC".equals(transaccion.getModalidad()))) {
+        if (transaccion.getModalidad() == null || 
+            (!"SIM".equals(transaccion.getModalidad()) && 
+             !"REC".equals(transaccion.getModalidad()) && 
+             !"DIF".equals(transaccion.getModalidad()))) {
             transaccion.setModalidad("SIM");
         }
         
@@ -198,7 +191,12 @@ public class TransaccionService {
         request.setNombreTitular(transaccion.getNombreTitular());
         request.setCodigoUnicoTransaccion(transaccion.getCodigoUnicoTransaccion());
         
-        // Enviar datos sensibles al gateway (no se almacenan en la BD)
+        if (transaccion.getDetalle() != null && !transaccion.getDetalle().isEmpty()) {
+            request.setReferencia(transaccion.getDetalle());
+        }
+        
+        request.setPais("EC");
+        
         if (cvv != null && !cvv.isEmpty()) {
             request.setCodigoSeguridad(Integer.parseInt(cvv));
         }
@@ -207,15 +205,24 @@ public class TransaccionService {
             request.setFechaExpiracion(fechaExpiracion);
         }
         
-        // Si es recurrente, enviar los datos correspondientes
-        if ("REC".equals(transaccion.getModalidad())) {
+        if ("DIF".equals(transaccion.getModalidad())) {
+       
+            request.setModalidad("DIF");
+            request.setPlazo(transaccion.getPlazo());
+            request.setRecurrente(false);
+            request.setFrecuenciaDias(null);
+        } else if ("REC".equals(transaccion.getModalidad())) {
+        
+            request.setModalidad("REC");
             request.setRecurrente(true);
             request.setFrecuenciaDias(transaccion.getFrecuenciaDias());
-        }
-        
-        // Si es diferido (modalidad SIM con plazo), enviar el plazo
-        if ("SIM".equals(transaccion.getModalidad()) && transaccion.getPlazo() != null) {
-            request.setPlazo(transaccion.getPlazo());
+            request.setPlazo(null);
+        } else {
+       
+            request.setModalidad("SIM");
+            request.setRecurrente(false);
+            request.setFrecuenciaDias(null);
+            request.setPlazo(null);
         }
         
         String requestId = UUID.randomUUID().toString();

@@ -11,7 +11,7 @@ import com.banquito.pos.client.dto.TransaccionResponseDTO;
 @FeignClient(name = "payment-gateway", url = "${payment-gateway.url}")
 public interface PaymentGatewayClient {
 
-    @PostMapping("/v1/transacciones")
+    @PostMapping("/api/v1/transacciones")
     TransaccionResponseDTO procesarTransaccion(
             @RequestHeader("X-Request-ID") String requestId,
             @RequestBody TransaccionRequestDTO transaccion);
